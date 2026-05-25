@@ -69,6 +69,7 @@ public:
 	Model& operator=(Model&&) noexcept;
 
 	void inference();
+	void inference_device_input();
 	void infer_zero_input();
 	[[nodiscard]] int get_batch_size() const noexcept;
 	[[nodiscard]] TaskType task_type() const noexcept;

@@ -179,6 +179,21 @@ void Model::inference() {
     check_cuda(cudaStreamSynchronize(cuda_stream_), "cudaStreamSynchronize");
 }
 
+void Model::inference_device_input() {
+    if (context_ == nullptr) {
+        throw std::runtime_error("TensorRT execution context is not initialized");
+    }
+    if (buffers_ == nullptr) {
+        throw std::runtime_error("BufferManager is not initialized");
+    }
+
+    if (!context_->enqueueV3(cuda_stream_)) {
+        throw std::runtime_error("TensorRT enqueueV3 failed");
+    }
+    buffers_->copyOutputToHostAsync(cuda_stream_);
+    check_cuda(cudaStreamSynchronize(cuda_stream_), "cudaStreamSynchronize");
+}
+
 void Model::infer_zero_input() {
     if (buffers_ == nullptr) {
         throw std::runtime_error("BufferManager is not initialized");

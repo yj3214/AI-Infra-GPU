@@ -1,4 +1,5 @@
 build/
+imgs/
 .vscode/
 *.onnx
 *.plan

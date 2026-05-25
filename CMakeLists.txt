@@ -7,6 +7,8 @@ project(myai_gpu
 )
 
 find_package(CUDAToolkit REQUIRED)
+set(OpenCV_DIR "/usr/local/lib/cmake/opencv4")
+find_package(OpenCV REQUIRED)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -78,8 +80,22 @@ target_link_libraries(simple_demo
         myai_gpu::myai_gpu
 )
 
+add_executable(classification_demo
+    example/cls/main.cpp
+)
+
+target_link_libraries(classification_demo
+    PRIVATE
+        myai_gpu::myai_gpu
+    ${OpenCV_LIBS}
+)
+
 enable_testing()
 add_test(NAME simple_demo_runs COMMAND simple_demo)
 set_tests_properties(simple_demo_runs PROPERTIES
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+add_test(NAME classification_demo_runs COMMAND classification_demo)
+set_tests_properties(classification_demo_runs PROPERTIES
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
