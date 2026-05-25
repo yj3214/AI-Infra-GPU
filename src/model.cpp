@@ -361,9 +361,10 @@ void Model::parse_model(const std::string& model_path) {
                     opt_dims.d[dim] = 3;
                     max_dims.d[dim] = 3;
                 } else if (dims.nbDims == 4 && dim > 1) {
-                    min_dims.d[dim] = 224;
-                    opt_dims.d[dim] = 224;
-                    max_dims.d[dim] = 224;
+                    const int input_size = dim == 2 ? config_.input_height : config_.input_width;
+                    min_dims.d[dim] = input_size;
+                    opt_dims.d[dim] = input_size;
+                    max_dims.d[dim] = input_size;
                 } else {
                     min_dims.d[dim] = dim == 0 ? 1 : 1;
                     opt_dims.d[dim] = dim == 0 ? config_.batch_size : 1;
@@ -513,10 +514,10 @@ void Model::apply_dynamic_input_shapes() {
                 dims.d[1] = 3;
             }
             if (dims.d[2] == -1) {
-                dims.d[2] = 224;
+                dims.d[2] = config_.input_height;
             }
             if (dims.d[3] == -1) {
-                dims.d[3] = 224;
+                dims.d[3] = config_.input_width;
             }
         }
 

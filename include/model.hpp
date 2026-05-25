@@ -42,6 +42,8 @@ enum class ModelFormat {
 
 struct ModelConfig {
 	int batch_size{1};
+	int input_height{224};
+	int input_width{224};
 	bool use_fp16{false};
 	std::size_t workspace_size_bytes{1ULL << 30};
 };
