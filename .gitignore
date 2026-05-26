@@ -3,4 +3,5 @@ docs/
 imgs/
 .vscode/
 *.onnx
+*.pth
 *.plan

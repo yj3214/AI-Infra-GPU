@@ -1,0 +1,11 @@
+{
+  "input_color_format": "BGR",
+  "keep_ratio": false,
+  "mean": [0.0, 0.0, 0.0],
+  "std": [1.0, 1.0, 1.0],
+  "batch_size": 1,
+  "height": 512,
+  "width": 512,
+  "use_fp16": true,
+  "mask_threshold": 0.5
+}

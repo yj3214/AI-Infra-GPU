@@ -66,6 +66,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_library(myai_gpu SHARED
     src/classifier.cpp
     src/detector.cpp
+    src/segmentor.cpp
     src/model.cpp
 )
 
@@ -132,6 +133,18 @@ if(MYAI_GPU_BUILD_EXAMPLES)
                 ${OpenCV_LIBS}
         )
     endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/example/seg/main.cpp")
+        add_executable(segmentation_demo
+            example/seg/main.cpp
+        )
+
+        target_link_libraries(segmentation_demo
+            PRIVATE
+                myai_gpu::myai_gpu
+                ${OpenCV_LIBS}
+        )
+    endif()
 endif()
 
 if(MYAI_GPU_BUILD_TESTS)
@@ -161,6 +174,17 @@ if(MYAI_GPU_BUILD_TESTS)
     )
 
     target_link_libraries(detector_gtest
+        PRIVATE
+            myai_gpu::myai_gpu
+            ${OpenCV_LIBS}
+            ${MYAI_GTEST_TARGET}
+    )
+
+    add_executable(segmentor_gtest
+        test/segmentor_gtest.cpp
+    )
+
+    target_link_libraries(segmentor_gtest
         PRIVATE
             myai_gpu::myai_gpu
             ${OpenCV_LIBS}
@@ -196,6 +220,21 @@ if(MYAI_GPU_BUILD_EXAMPLES)
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
     endif()
+    if(TARGET segmentation_demo)
+        add_test(
+            NAME segmentation_demo_runs
+            COMMAND segmentation_demo
+                ${CMAKE_CURRENT_SOURCE_DIR}/unet.onnx
+                ${CMAKE_CURRENT_SOURCE_DIR}/imgs/cat.jpg
+                ${CMAKE_CURRENT_SOURCE_DIR}/config/seg_config.json
+                ${CMAKE_CURRENT_SOURCE_DIR}/imgs/cat_seg_res.png
+                1
+                3
+        )
+        set_tests_properties(segmentation_demo_runs PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+    endif()
 endif()
 
 if(MYAI_GPU_BUILD_TESTS)
@@ -228,6 +267,17 @@ if(MYAI_GPU_BUILD_TESTS)
             --gtest_output=xml:${CMAKE_CURRENT_BINARY_DIR}/detector_gtest_report.xml
     )
     set_tests_properties(detector_gtest_runs PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    add_test(
+        NAME segmentor_gtest_runs
+        COMMAND segmentor_gtest
+            --model_path=${CMAKE_CURRENT_SOURCE_DIR}/unet.onnx
+            --image_path=${CMAKE_CURRENT_SOURCE_DIR}/imgs/car.jpg
+            --config_path=${CMAKE_CURRENT_SOURCE_DIR}/config/seg_config.json
+            --gtest_output=xml:${CMAKE_CURRENT_BINARY_DIR}/segmentor_gtest_report.xml
+    )
+    set_tests_properties(segmentor_gtest_runs PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
