@@ -1,0 +1,12 @@
+{
+  "input_color_format": "BGR",
+  "keep_ratio": true,
+  "iou_threshold": 0.6,
+  "confidence_threshold": 0.5,
+  "mean": [0.0, 0.0, 0.0],
+  "std": [1.0, 1.0, 1.0],
+  "batch_size": 1,
+  "height": 640,
+  "width": 640,
+  "use_fp16": true
+}

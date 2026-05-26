@@ -65,6 +65,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 add_library(myai_gpu SHARED
     src/classifier.cpp
+    src/detector.cpp
     src/model.cpp
 )
 
@@ -119,6 +120,18 @@ if(MYAI_GPU_BUILD_EXAMPLES)
                 ${OpenCV_LIBS}
         )
     endif()
+
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/example/det/main.cpp")
+        add_executable(detection_demo
+            example/det/main.cpp
+        )
+
+        target_link_libraries(detection_demo
+            PRIVATE
+                myai_gpu::myai_gpu
+                ${OpenCV_LIBS}
+        )
+    endif()
 endif()
 
 if(MYAI_GPU_BUILD_TESTS)
@@ -142,6 +155,17 @@ if(MYAI_GPU_BUILD_TESTS)
             ${OpenCV_LIBS}
             ${MYAI_GTEST_TARGET}
     )
+
+    add_executable(detector_gtest
+        test/detector_gtest.cpp
+    )
+
+    target_link_libraries(detector_gtest
+        PRIVATE
+            myai_gpu::myai_gpu
+            ${OpenCV_LIBS}
+            ${MYAI_GTEST_TARGET}
+    )
 endif()
 
 enable_testing()
@@ -156,6 +180,19 @@ if(MYAI_GPU_BUILD_EXAMPLES)
     if(TARGET classification_demo)
         add_test(NAME classification_demo_runs COMMAND classification_demo)
         set_tests_properties(classification_demo_runs PROPERTIES
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+    endif()
+    if(TARGET detection_demo)
+        add_test(
+            NAME detection_demo_runs
+            COMMAND detection_demo
+                ${CMAKE_CURRENT_SOURCE_DIR}/yolov8s.onnx
+                ${CMAKE_CURRENT_SOURCE_DIR}/imgs/bus.jpg
+                ${CMAKE_CURRENT_SOURCE_DIR}/config/det_config.json
+                ${CMAKE_CURRENT_SOURCE_DIR}/imgs/bus_res.jpg
+        )
+        set_tests_properties(detection_demo_runs PROPERTIES
             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
         )
     endif()
@@ -180,6 +217,17 @@ if(MYAI_GPU_BUILD_TESTS)
             --gtest_output=xml:${CMAKE_CURRENT_BINARY_DIR}/classifier_gtest_report.xml
     )
     set_tests_properties(classifier_gtest_runs PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    add_test(
+        NAME detector_gtest_runs
+        COMMAND detector_gtest
+            --model_path=${CMAKE_CURRENT_SOURCE_DIR}/yolov8s.onnx
+            --image_path=${CMAKE_CURRENT_SOURCE_DIR}/imgs/cat.jpg
+            --config_path=${CMAKE_CURRENT_SOURCE_DIR}/config/det_config.json
+            --gtest_output=xml:${CMAKE_CURRENT_BINARY_DIR}/detector_gtest_report.xml
+    )
+    set_tests_properties(detector_gtest_runs PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     )
 endif()
