@@ -306,34 +306,68 @@ void Model::init_model(const std::string& model_path) {
 }
 
 void Model::parse_model(const std::string& model_path) {
+    /*
+        1. 创建TensorRT builder
+        2. 作用：
+            - 创建network定义
+            - 创建builder config并设置工作空间大小和FP16选项
+            - optimization profile：如果模型有动态输入维度，则需要为每个动态输入设置最小/最优/最大形状的配置文件
+            - 最终构建engine并序列化为plan文件以供后续使用
+    */
     auto builder = std::unique_ptr<nvinfer1::IBuilder>{nvinfer1::createInferBuilder(logger_)};
     if (builder == nullptr) {
         throw std::runtime_error("failed to create TensorRT builder");
     }
+    /*
+        1. 创建TensorRT network
+        2. 作用：
+            - ONNX解析器会把ONNX模型结构解析到 network中
+            - 0U表示使用默认方式创建 network定义（不使用显式batch维度）
 
+    */
     auto network = std::unique_ptr<nvinfer1::INetworkDefinition>{builder->createNetworkV2(0U)};
     if (network == nullptr) {
         throw std::runtime_error("failed to create TensorRT network");
     }
-
+    /*
+        1. 创建TensorRT builder config
+        2. 作用：
+            - 设置构建engine时的配置选项，例如工作空间大小、是否启用FP16等
+    */
     auto config = std::unique_ptr<nvinfer1::IBuilderConfig>{builder->createBuilderConfig()};
     if (config == nullptr) {
         throw std::runtime_error("failed to create TensorRT builder config");
     }
+    /*
+        1. 设置workspace的工作空间大小
+        2. 设置FP16选项（只有配置允许且当前平台支持快速 FP16 时才启用。）
+    */
     config->setMemoryPoolLimit(nvinfer1::MemoryPoolType::kWORKSPACE, config_.workspace_size_bytes);
     if (config_.use_fp16 && builder->platformHasFastFp16()) {
         config->setFlag(nvinfer1::BuilderFlag::kFP16);
     }
-
+    /*
+        1. 创建onnxparser并将network和logger传入
+        2. 作用：
+            - 解析ONNX模型文件并将其转换为TensorRT的network定义
+    */
     auto parser = std::unique_ptr<nvonnxparser::IParser>{nvonnxparser::createParser(*network, logger_)};
     if (parser == nullptr) {
         throw std::runtime_error("failed to create ONNX parser");
     }
-
+    /*
+        1. 解析ONNX模型文件
+        2. 作用：
+            - 将ONNX模型文件解析到network定义中，以便后续构建TensorRT engine
+    */
     if (!parser->parseFromFile(model_path.c_str(), static_cast<int32_t>(nvinfer1::ILogger::Severity::kWARNING))) {
         throw std::runtime_error("failed to parse ONNX model: " + model_path);
     }
-
+    /*
+        1. 为动态输入设置优化配置文件
+        2. 作用：
+            - 主要处理动态输入维度
+    */
     auto* profile = builder->createOptimizationProfile();
     if (profile == nullptr) {
         throw std::runtime_error("failed to create TensorRT optimization profile");
@@ -354,6 +388,11 @@ void Model::parse_model(const std::string& model_path) {
         auto min_dims = dims;
         auto opt_dims = dims;
         auto max_dims = dims;
+        /*
+            1. 通道维是动态，则设置为3（假设是RGB图像输入）
+            2. 高宽维是动态，则设置为config中指定的输入尺寸（例如224x224）
+            3. 批次维是动态，则设置为config中指定的批次大小（例如1），并且最大批次大小可以设置为更大的值以支持更大的输入（例如4或8），具体取决于模型和GPU的能力
+        */
         for (int32_t dim = 0; dim < dims.nbDims; ++dim) {
             if (dims.d[dim] < 0) {
                 if (dims.nbDims == 4 && dim == 1) {
@@ -372,7 +411,11 @@ void Model::parse_model(const std::string& model_path) {
                 }
             }
         }
-
+        /*
+            1. 将设置好的最小/最优/最大形状配置应用到优化配置文件中
+            2. 作用：
+                - 告诉TensorRT在构建engine时如何处理动态输入维度，以便在推理时能够接受不同形状的输入
+        */
         const char* input_name = input->getName();
         if (!profile->setDimensions(input_name, nvinfer1::OptProfileSelector::kMIN, min_dims) ||
             !profile->setDimensions(input_name, nvinfer1::OptProfileSelector::kOPT, opt_dims) ||
@@ -381,21 +424,37 @@ void Model::parse_model(const std::string& model_path) {
         }
         has_dynamic_input = true;
     }
-
+    /*
+        1. 如果模型有动态输入维度，则将优化配置文件添加到builder config中
+        2. 作用：
+            - 确保在构建engine时考虑动态输入的形状范围，以便生成能够处理这些输入的engine
+    */
     if (has_dynamic_input) {
         if (!profile->isValid()) {
             throw std::runtime_error("TensorRT optimization profile is invalid");
         }
         config->addOptimizationProfile(profile);
     }
-
+    /*
+        1. 构建序列化的engine
+        2. 作用：
+            - 根据network定义和builder config构建TensorRT engine，并将其序列化为内存中的二进制数据，以便后续创建runtime和engine
+    */
     auto serialized_engine = std::unique_ptr<nvinfer1::IHostMemory>{builder->buildSerializedNetwork(*network, *config)};
     if (serialized_engine == nullptr) {
         throw std::runtime_error("failed to build TensorRT serialized engine from ONNX: " + model_path);
     }
-
+    /*
+        1. 将序列化的engine写入.plan文件以供后续使用
+        2. 作用：
+            - 避免每次加载模型时都从ONNX构建engine，节省时间。
+    */
     write_binary_file(plan_path_for_onnx(model_path), serialized_engine->data(), serialized_engine->size());
-
+    /*
+        1. 创建runtime并从序列化的engine创建engine实例
+        2. 作用：
+            - 从序列化的engine数据创建TensorRT runtime和engine实例，以便后续进行推理。
+    */
     runtime_ = std::unique_ptr<nvinfer1::IRuntime>{nvinfer1::createInferRuntime(logger_)};
     if (runtime_ == nullptr) {
         throw std::runtime_error("failed to create TensorRT runtime");
@@ -465,6 +524,7 @@ void Model::collect_tensor_info() {
     }
 
     const int32_t tensor_count = engine_->getNbIOTensors();
+    // 预先分配足够的空间以避免在循环中多次重新分配
     tensors_.reserve(static_cast<std::size_t>(tensor_count));
 
     for (int32_t i = 0; i < tensor_count; ++i) {
@@ -493,19 +553,22 @@ void Model::apply_dynamic_input_shapes() {
     if (engine_ == nullptr || context_ == nullptr) {
         return;
     }
-
+    // 获取所有输入输出tensor的数量
     const int32_t tensor_count = engine_->getNbIOTensors();
+    // 遍历每个tensor
     for (int32_t i = 0; i < tensor_count; ++i) {
+        // 获取tensor名称
         const char* tensor_name = engine_->getIOTensorName(i);
+        // 如果tensor名称为空或者不是输入tensor，则跳过
         if (tensor_name == nullptr || engine_->getTensorIOMode(tensor_name) != nvinfer1::TensorIOMode::kINPUT) {
             continue;
         }
-
+        // 获取tensor的形状信息，如果没有动态维度则跳过
         auto dims = engine_->getTensorShape(tensor_name);
         if (!has_dynamic_dim(dims)) {
             continue;
         }
-
+        // 根据模型配置为动态维度设置具体的值，例如batch size
         if (dims.nbDims > 0 && dims.d[0] == -1) {
             dims.d[0] = config_.batch_size;
         }
@@ -520,7 +583,7 @@ void Model::apply_dynamic_input_shapes() {
                 dims.d[3] = config_.input_width;
             }
         }
-
+        // 将设置好的形状应用到执行上下文中，以便TensorRT能够正确地处理动态输入
         if (!context_->setInputShape(tensor_name, dims)) {
             throw std::runtime_error("failed to set dynamic input shape for tensor: " + std::string{tensor_name});
         }
